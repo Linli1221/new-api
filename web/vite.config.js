@@ -56,7 +56,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: ['antd'],
+      external: [],
       output: {
         manualChunks: {
           'react-core': ['react', 'react-dom', 'react-router-dom'],
