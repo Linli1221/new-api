@@ -3,12 +3,30 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"one-api/constant"
-	commonRelay "one-api/relay/common"
 	"time"
+
+	"github.com/QuantumNous/new-api/constant"
+	commonRelay "github.com/QuantumNous/new-api/relay/common"
 )
 
 type TaskStatus string
+
+func (t TaskStatus) ToVideoStatus() string {
+	var status string
+	switch t {
+	case TaskStatusQueued, TaskStatusSubmitted:
+		status = commonRelay.VideoStatusQueued
+	case TaskStatusInProgress:
+		status = commonRelay.VideoStatusInProgress
+	case TaskStatusSuccess:
+		status = commonRelay.VideoStatusCompleted
+	case TaskStatusFailure:
+		status = commonRelay.VideoStatusFailed
+	default:
+		status = commonRelay.VideoStatusUnknown // Default fallback
+	}
+	return status
+}
 
 const (
 	TaskStatusNotStart   TaskStatus = "NOT_START"
@@ -174,7 +192,7 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error
 	// get all tasks progress is not 100%
-	err = DB.Where("progress != ?", "100%").Limit(limit).Order("id").Find(&tasks).Error
+	err = DB.Where("progress != ?", "100%").Where("status != ?", TaskStatusFailure).Where("status != ?", TaskStatusSuccess).Limit(limit).Order("id").Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
