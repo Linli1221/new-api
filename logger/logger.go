@@ -66,7 +66,8 @@ func LogError(ctx context.Context, msg string) {
 	logHelper(ctx, loggerError, msg)
 }
 
-func LogDebug(ctx context.Context, msg string) {
+func LogDebug(ctx context.Context, msg string, args ...any) {
+	msg = fmt.Sprintf(msg, args...)
 	if common.DebugEnabled {
 		logHelper(ctx, loggerDebug, msg)
 	}
@@ -153,5 +154,5 @@ func LogJson(ctx context.Context, msg string, obj any) {
 		LogError(ctx, fmt.Sprintf("json marshal failed: %s", err.Error()))
 		return
 	}
-	LogInfo(ctx, fmt.Sprintf("%s | %s", msg, string(jsonStr)))
+	LogDebug(ctx, fmt.Sprintf("%s | %s", msg, string(jsonStr)))
 }

@@ -24,7 +24,7 @@ type ClaudeMediaMessage struct {
 	StopReason   *string              `json:"stop_reason,omitempty"`
 	PartialJson  *string              `json:"partial_json,omitempty"`
 	Role         string               `json:"role,omitempty"`
-	Thinking     string               `json:"thinking,omitempty"`
+	Thinking     *string              `json:"thinking,omitempty"`
 	Signature    string               `json:"signature,omitempty"`
 	Delta        string               `json:"delta,omitempty"`
 	CacheControl json.RawMessage      `json:"cache_control,omitempty"`
@@ -145,6 +145,10 @@ func (c *ClaudeMessage) GetStringContent() string {
 }
 
 func (c *ClaudeMessage) SetStringContent(content string) {
+	c.Content = content
+}
+
+func (c *ClaudeMessage) SetContent(content any) {
 	c.Content = content
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -64,6 +66,11 @@ type responseTask struct {
 	TimeElapsed string `json:"time_elapsed"`
 }
 
+const (
+	// 即梦限制单个文件最大4.7MB https://www.volcengine.com/docs/85621/1747301
+	MaxFileSize int64 = 4*1024*1024 + 700*1024 // 4.7MB (4MB + 724KB)
+)
+
 // ============================
 // Adaptor implementation
 // ============================
@@ -89,7 +96,6 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	// Accept only POST /v1/video/generations as "generate" action.
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
 }
 
@@ -113,13 +119,49 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 	return nil
 }
 
-// BuildRequestBody converts request into Jimeng specific format.
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
 	v, exists := c.Get("task_request")
 	if !exists {
 		return nil, fmt.Errorf("request not found in context")
 	}
-	req := v.(relaycommon.TaskSubmitReq)
+	req, ok := v.(relaycommon.TaskSubmitReq)
+	if !ok {
+		return nil, fmt.Errorf("invalid request type in context")
+	}
+	// 支持openai sdk的图片上传方式
+	if mf, err := c.MultipartForm(); err == nil {
+		if files, exists := mf.File["input_reference"]; exists && len(files) > 0 {
+			if len(files) == 1 {
+				info.Action = constant.TaskActionGenerate
+			} else if len(files) > 1 {
+				info.Action = constant.TaskActionFirstTailGenerate
+			}
+
+			// 将上传的文件转换为base64格式
+			var images []string
+
+			for _, fileHeader := range files {
+				// 检查文件大小
+				if fileHeader.Size > MaxFileSize {
+					return nil, fmt.Errorf("文件 %s 大小超过限制，最大允许 %d MB", fileHeader.Filename, MaxFileSize/(1024*1024))
+				}
+
+				file, err := fileHeader.Open()
+				if err != nil {
+					continue
+				}
+				fileBytes, err := io.ReadAll(file)
+				file.Close()
+				if err != nil {
+					continue
+				}
+				// 将文件内容转换为base64
+				base64Str := base64.StdEncoding.EncodeToString(fileBytes)
+				images = append(images, base64Str)
+			}
+			req.Images = images
+		}
+	}
 
 	body, err := a.convertToRequestPayload(&req)
 	if err != nil {
@@ -158,7 +200,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
-	ov := relaycommon.NewOpenAIVideo()
+	ov := dto.NewOpenAIVideo()
 	ov.ID = jResp.Data.TaskID
 	ov.TaskID = jResp.Data.TaskID
 	ov.CreatedAt = time.Now().Unix()
@@ -364,10 +406,10 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 	// 即梦视频3.0 ReqKey转换
 	// https://www.volcengine.com/docs/85621/1792707
 	if strings.Contains(r.ReqKey, "jimeng_v30") {
-		if len(r.ImageUrls) > 1 {
+		if len(req.Images) > 1 {
 			// 多张图片：首尾帧生成
 			r.ReqKey = strings.Replace(r.ReqKey, "jimeng_v30", "jimeng_i2v_first_tail_v30", 1)
-		} else if len(r.ImageUrls) == 1 {
+		} else if len(req.Images) == 1 {
 			// 单张图片：图生视频
 			r.ReqKey = strings.Replace(r.ReqKey, "jimeng_v30", "jimeng_i2v_first_v30", 1)
 		} else {
@@ -405,13 +447,13 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	return &taskResult, nil
 }
 
-func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) (*relaycommon.OpenAIVideo, error) {
+func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	var jimengResp responseTask
 	if err := json.Unmarshal(originTask.Data, &jimengResp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal jimeng task data failed")
 	}
 
-	openAIVideo := relaycommon.NewOpenAIVideo()
+	openAIVideo := dto.NewOpenAIVideo()
 	openAIVideo.ID = originTask.TaskID
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
@@ -420,13 +462,14 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) (*relaycommon
 	openAIVideo.CompletedAt = originTask.UpdatedAt
 
 	if jimengResp.Code != 10000 {
-		openAIVideo.Error = &relaycommon.OpenAIVideoError{
+		openAIVideo.Error = &dto.OpenAIVideoError{
 			Message: jimengResp.Message,
 			Code:    fmt.Sprintf("%d", jimengResp.Code),
 		}
 	}
 
-	return openAIVideo, nil
+	jsonData, _ := common.Marshal(openAIVideo)
+	return jsonData, nil
 }
 
 func isNewAPIRelay(apiKey string) bool {

@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/jina"
+	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/mistral"
 	"github.com/QuantumNous/new-api/relay/channel/mokaai"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
@@ -27,7 +28,9 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/perplexity"
 	"github.com/QuantumNous/new-api/relay/channel/siliconflow"
 	"github.com/QuantumNous/new-api/relay/channel/submodel"
+	taskali "github.com/QuantumNous/new-api/relay/channel/task/ali"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
+	taskGemini "github.com/QuantumNous/new-api/relay/channel/task/gemini"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
@@ -108,6 +111,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &moonshot.Adaptor{} // Moonshot uses Claude API
 	case constant.APITypeSubmodel:
 		return &submodel.Adaptor{}
+	case constant.APITypeMiniMax:
+		return &minimax.Adaptor{}
 	}
 	return nil
 }
@@ -129,6 +134,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 	}
 	if channelType, err := strconv.ParseInt(string(platform), 10, 64); err == nil {
 		switch channelType {
+		case constant.ChannelTypeAli:
+			return &taskali.TaskAdaptor{}
 		case constant.ChannelTypeKling:
 			return &kling.TaskAdaptor{}
 		case constant.ChannelTypeJimeng:
@@ -139,8 +146,10 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskVidu.TaskAdaptor{}
 		case constant.ChannelTypeDoubaoVideo:
 			return &taskdoubao.TaskAdaptor{}
-		case constant.ChannelTypeSora:
+		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
 			return &tasksora.TaskAdaptor{}
+		case constant.ChannelTypeGemini:
+			return &taskGemini.TaskAdaptor{}
 		}
 	}
 	return nil

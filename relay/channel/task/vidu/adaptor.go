@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/gin-gonic/gin"
 
 	"github.com/QuantumNous/new-api/constant"
@@ -155,7 +156,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
-	ov := relaycommon.NewOpenAIVideo()
+	ov := dto.NewOpenAIVideo()
 	ov.ID = vResp.TaskId
 	ov.TaskID = vResp.TaskId
 	ov.CreatedAt = time.Now().Unix()
@@ -263,13 +264,13 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	return taskInfo, nil
 }
 
-func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) (*relaycommon.OpenAIVideo, error) {
+func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	var viduResp taskResultResponse
 	if err := json.Unmarshal(originTask.Data, &viduResp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal vidu task data failed")
 	}
 
-	openAIVideo := relaycommon.NewOpenAIVideo()
+	openAIVideo := dto.NewOpenAIVideo()
 	openAIVideo.ID = originTask.TaskID
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
@@ -281,11 +282,12 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) (*relaycommon
 	}
 
 	if viduResp.State == "failed" && viduResp.ErrCode != "" {
-		openAIVideo.Error = &relaycommon.OpenAIVideoError{
+		openAIVideo.Error = &dto.OpenAIVideoError{
 			Message: viduResp.ErrCode,
 			Code:    viduResp.ErrCode,
 		}
 	}
 
-	return openAIVideo, nil
+	jsonData, _ := common.Marshal(openAIVideo)
+	return jsonData, nil
 }
